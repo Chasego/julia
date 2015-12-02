@@ -145,6 +145,38 @@ Linear algebra functions in Julia are largely implemented by calling functions f
 
    ``cholfact!`` is the same as :func:`cholfact`, but saves space by overwriting the input ``A``, instead of creating a copy. ``cholfact!`` can also reuse the symbolic factorization from a different matrix ``F`` with the same structure when used as: ``cholfact!(F::CholmodFactor, A)``.
 
+.. currentmodule:: Base.LinAlg
+
+.. function:: update(C::Cholesky, v::StridedVector) -> CC::Cholesky
+              
+              Update or Cholesky factorization `C` with the vector `v`. If `A = C[:U]'C[:U]` then `CC = cholfact(C[:U]'C[:U] + v*v')` but the computation of `CC` only uses `O(n^2)` operations.
+
+   .. Docstring generated from Julia source
+
+
+.. function:: downdate(C::Cholesky, v::StridedVector) -> CC::Cholesky
+              
+              Downdate a Cholesky factorization `C` with the vector `v`. If `A = C[:U]'C[:U]` then `CC = cholfact(C[:U]'C[:U] - v*v')` but the computation of `CC` only uses `O(n^2)` operations.
+
+   .. Docstring generated from Julia source
+
+
+.. function:: update!(C::Cholesky, v::StridedVector) -> CC::Cholesky
+              
+              Update a Cholesky factorization `C` with the vector `v`. If `A = C[:U]'C[:U]` then `CC = cholfact(C[:U]'C[:U] _ v*v')` but the computation of `CC` only uses `O(n^2)` operations. The input factorization `C` is updated in place such that on exit `C == CC`. The vector `v` is destroyed during the computation.
+
+   .. Docstring generated from Julia source
+
+
+.. function:: downdate!(C::Cholesky, v::StridedVector) -> CC::Cholesky
+              
+              Downdate a Cholesky factorization `C` with the vector `v`. If `A = C[:U]'C[:U]` then `CC = cholfact(C[:U]'C[:U] - v*v')` but the computation of `CC` only uses `O(n^2)` operations. The input factorization `C` is updated in place such that on exit `C == CC`. The vector `v` is destroyed during the computation.
+
+   .. Docstring generated from Julia source
+
+
+.. currentmodule:: Base
+
 .. function:: ldltfact(::SymTridiagonal) -> LDLt
 
    .. Docstring generated from Julia source
