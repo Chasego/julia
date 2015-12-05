@@ -465,7 +465,7 @@ public:
 };
 
 #ifdef USE_ORCJIT
-DLLEXPORT void ORCNotifyObjectEmitted(JITEventListener *Listener,
+JL_DLLEXPORT void ORCNotifyObjectEmitted(JITEventListener *Listener,
                                       const object::ObjectFile &obj,
                                       const object::ObjectFile &debugObj,
                                       const RuntimeDyld::LoadedObjectInfo &L)

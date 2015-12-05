@@ -147,7 +147,7 @@ extern "C" {
   LLVM_ATTRIBUTE_NOINLINE extern void __jit_debug_register_code();
 }
 
-extern DLLEXPORT void ORCNotifyObjectEmitted(JITEventListener *Listener,
+extern JL_DLLEXPORT void ORCNotifyObjectEmitted(JITEventListener *Listener,
                                       const object::ObjectFile &obj,
                                       const object::ObjectFile &debugObj,
                                       const RuntimeDyld::LoadedObjectInfo &L);

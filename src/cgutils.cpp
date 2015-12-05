@@ -427,7 +427,11 @@ public:
 	    return NewF;
     }
 
+#ifdef LLVM38
+    virtual Value *materializeDeclFor(Value *V)
+#else
     virtual Value *materializeValueFor (Value *V)
+#endif
     {
         Function *F = dyn_cast<Function>(V);
         if (F) {
