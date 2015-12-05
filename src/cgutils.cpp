@@ -32,14 +32,14 @@ static Instruction *tbaa_decorate(MDNode* md, Instruction* load_or_store)
 static GlobalVariable *CreateGlobalString(StringRef Str,
                                                   const Twine &Name,
                                                   unsigned AddressSpace) {
-  Constant *StrConstant = ConstantDataArray::getString(jl_LLVMContext, Str);
-  GlobalVariable *GV = new GlobalVariable(*active_module, StrConstant->getType(),
+    Constant *StrConstant = ConstantDataArray::getString(jl_LLVMContext, Str);
+    GlobalVariable *GV = new GlobalVariable(*active_module, StrConstant->getType(),
                                           true, GlobalValue::PrivateLinkage,
                                           StrConstant, Name, NULL,
                                           GlobalVariable::NotThreadLocal,
                                           AddressSpace);
-  GV->setUnnamedAddr(true);
-  return GV;
+    GV->setUnnamedAddr(true);
+    return GV;
 }
 
 /// \brief Same as CreateGlobalString, but return a pointer with "i8*" type
