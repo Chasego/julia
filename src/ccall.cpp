@@ -8,7 +8,8 @@ static std::set<u_int64_t> llvmcallDecls;
 
 static std::map<std::string, GlobalVariable*> libMapGV;
 static std::map<std::string, GlobalVariable*> symMapGV;
-static Value *runtime_sym_lookup(PointerType *funcptype, const char *f_lib, const char *f_name, jl_codectx_t *ctx)
+static Value *runtime_sym_lookup(PointerType *funcptype, const char *f_lib,
+                                 const char *f_name, jl_codectx_t *ctx)
 {
     // in pseudo-code, this function emits the following:
     //   global HMODULE *libptrgv

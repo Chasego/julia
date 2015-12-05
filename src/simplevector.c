@@ -9,8 +9,11 @@
 
 JL_DLLEXPORT jl_svec_t *jl_svec(size_t n, ...)
 {
+    // unmanaged safe
     va_list args;
-    if (n == 0) return jl_emptysvec;
+    if (n == 0)
+        return jl_emptysvec;
+    JL_RETURN_NULL_IF_UNMANAGED();
     va_start(args, n);
     jl_svec_t *jv = jl_alloc_svec_uninit(n);
     for(size_t i=0; i < n; i++) {
@@ -22,6 +25,8 @@ JL_DLLEXPORT jl_svec_t *jl_svec(size_t n, ...)
 
 JL_DLLEXPORT jl_svec_t *jl_svec1(void *a)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     jl_svec_t *v = (jl_svec_t*)jl_gc_alloc_2w();
     jl_set_typeof(v, jl_simplevector_type);
     jl_svec_set_len_unsafe(v, 1);
@@ -31,6 +36,8 @@ JL_DLLEXPORT jl_svec_t *jl_svec1(void *a)
 
 JL_DLLEXPORT jl_svec_t *jl_svec2(void *a, void *b)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     jl_svec_t *v = (jl_svec_t*)jl_gc_alloc_3w();
     jl_set_typeof(v, jl_simplevector_type);
     jl_svec_set_len_unsafe(v, 2);
@@ -41,7 +48,10 @@ JL_DLLEXPORT jl_svec_t *jl_svec2(void *a, void *b)
 
 JL_DLLEXPORT jl_svec_t *jl_alloc_svec_uninit(size_t n)
 {
-    if (n == 0) return jl_emptysvec;
+    // unmanaged safe
+    if (n == 0)
+        return jl_emptysvec;
+    JL_RETURN_NULL_IF_UNMANAGED();
     jl_svec_t *jv = (jl_svec_t*)newobj((jl_value_t*)jl_simplevector_type, n+1);
     jl_svec_set_len_unsafe(jv, n);
     return jv;
@@ -49,7 +59,10 @@ JL_DLLEXPORT jl_svec_t *jl_alloc_svec_uninit(size_t n)
 
 JL_DLLEXPORT jl_svec_t *jl_alloc_svec(size_t n)
 {
-    if (n == 0) return jl_emptysvec;
+    // unmanaged safe
+    if (n == 0)
+        return jl_emptysvec;
+    JL_RETURN_NULL_IF_UNMANAGED();
     jl_svec_t *jv = jl_alloc_svec_uninit(n);
     for(size_t i=0; i < n; i++) {
         jl_svecset(jv, i, NULL);
@@ -59,6 +72,8 @@ JL_DLLEXPORT jl_svec_t *jl_alloc_svec(size_t n)
 
 JL_DLLEXPORT jl_svec_t *jl_svec_append(jl_svec_t *a, jl_svec_t *b)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     jl_svec_t *c = jl_alloc_svec_uninit(jl_svec_len(a) + jl_svec_len(b));
     size_t i=0, j;
     for(j=0; j < jl_svec_len(a); j++) {
@@ -74,12 +89,16 @@ JL_DLLEXPORT jl_svec_t *jl_svec_append(jl_svec_t *a, jl_svec_t *b)
 
 JL_DLLEXPORT jl_svec_t *jl_svec_copy(jl_svec_t *a)
 {
+    // unmanaged safe
     return jl_svec_append(a, jl_emptysvec);
 }
 
 JL_DLLEXPORT jl_svec_t *jl_svec_fill(size_t n, jl_value_t *x)
 {
-    if (n==0) return jl_emptysvec;
+    // unmanaged safe
+    if (n == 0)
+        return jl_emptysvec;
+    JL_RETURN_NULL_IF_UNMANAGED();
     jl_svec_t *v = jl_alloc_svec_uninit(n);
     for(size_t i=0; i < n; i++) {
         jl_svecset(v, i, x);

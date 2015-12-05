@@ -42,6 +42,7 @@ static value_t julia_to_scm(jl_value_t *v);
 
 value_t fl_defined_julia_global(value_t *args, uint32_t nargs)
 {
+    // unmanaged safe
     // tells whether a var is defined in and *by* the current module
     argcount("defined-julia-global", nargs, 1);
     (void)tosymbol(args[0], "defined-julia-global");
@@ -55,15 +56,19 @@ value_t fl_defined_julia_global(value_t *args, uint32_t nargs)
 
 value_t fl_current_julia_module(value_t *args, uint32_t nargs)
 {
+    // unmanaged safe
     value_t opaque = cvalue(jvtype, sizeof(void*));
-    *(jl_value_t**)cv_data((cvalue_t*)ptr(opaque)) = (jl_value_t*)jl_current_module;
+    *(jl_value_t**)cv_data((cvalue_t*)ptr(opaque)) =
+        (jl_value_t*)jl_current_module;
     return opaque;
 }
 
 value_t fl_invoke_julia_macro(value_t *args, uint32_t nargs)
 {
+    // unmanaged safe
     if (nargs < 1)
         argcount("invoke-julia-macro", nargs, 1);
+    int8_t gc_state = jl_gc_managed_enter();
     jl_function_t *f = NULL;
     jl_value_t **margs;
     JL_GC_PUSHARGS(margs, nargs);
@@ -79,6 +84,7 @@ value_t fl_invoke_julia_macro(value_t *args, uint32_t nargs)
     }
     JL_CATCH {
         JL_GC_POP();
+        jl_gc_managed_leave(gc_state);
         value_t opaque = cvalue(jvtype, sizeof(void*));
         *(jl_value_t**)cv_data((cvalue_t*)ptr(opaque)) = jl_exception_in_transit;
         return fl_list2(fl_error_sym, opaque);
@@ -105,6 +111,7 @@ value_t fl_invoke_julia_macro(value_t *args, uint32_t nargs)
     fl_free_gc_handles(1);
 
     JL_GC_POP();
+    jl_gc_managed_leave(gc_state);
     return scmresult;
 }
 
@@ -150,12 +157,14 @@ void jl_init_frontend(void)
 
 JL_DLLEXPORT void jl_lisp_prompt(void)
 {
+    // unmanaged safe
     if (jvtype==NULL) jl_init_frontend();
     fl_applyn(1, symbol_value(symbol("__start")), fl_cons(FL_NIL,FL_NIL));
 }
 
 static jl_sym_t *scmsym_to_julia(value_t s)
 {
+    // unmanaged safe
     assert(issymbol(s));
     if (fl_isgensym(s)) {
         static char gsname[16];
@@ -171,6 +180,7 @@ static jl_value_t *scm_to_julia_(value_t e, int expronly);
 
 static jl_value_t *full_list(value_t e, int expronly)
 {
+    // GC disabled
     size_t ln = llength(e);
     if (ln == 0) return jl_an_empty_cell;
     jl_array_t *ar = jl_alloc_cell_1d(ln);
@@ -185,6 +195,7 @@ static jl_value_t *full_list(value_t e, int expronly)
 
 static jl_value_t *full_list_of_lists(value_t e, int expronly)
 {
+    // GC disabled
     size_t ln = llength(e);
     if (ln == 0) return jl_an_empty_cell;
     jl_array_t *ar = jl_alloc_cell_1d(ln);
@@ -201,6 +212,7 @@ static jl_value_t *resolve_globals(jl_value_t *expr, jl_lambda_info_t *lam);
 
 static jl_value_t *scm_to_julia(value_t e, int expronly)
 {
+    // unmanaged safe (disables GC)
     int en = jl_gc_enable(0);
     jl_value_t *v;
     JL_TRY {
@@ -220,6 +232,7 @@ extern int64_t conv_to_int64(void *data, numerictype_t tag);
 
 static jl_value_t *scm_to_julia_(value_t e, int eo)
 {
+    // GC disabled
     if (fl_isnumber(e)) {
         int64_t i64;
         if (isfixnum(e)) {
@@ -408,6 +421,7 @@ static arraylist_t jlgensym_to_flisp;
 
 static value_t julia_to_scm(jl_value_t *v)
 {
+    // managed only
     value_t temp;
     if (jlgensym_to_flisp.len)
         jlgensym_to_flisp.len = 0; // in case we didn't free it last time we got here (for example, if we threw an error)
@@ -426,6 +440,7 @@ static value_t julia_to_scm(jl_value_t *v)
 
 static void array_to_list(jl_array_t *a, value_t *pv)
 {
+    // managed only
     if (jl_array_len(a) > 300000)
         lerror(OutOfMemoryError, "expression too large");
     value_t temp;
@@ -439,6 +454,7 @@ static void array_to_list(jl_array_t *a, value_t *pv)
 
 static value_t julia_to_list2(jl_value_t *a, jl_value_t *b)
 {
+    // managed only
     value_t sa = julia_to_scm_(a);
     fl_gc_handle(&sa);
     value_t sb = julia_to_scm_(b);
@@ -449,6 +465,7 @@ static value_t julia_to_list2(jl_value_t *a, jl_value_t *b)
 
 static value_t julia_to_scm_(jl_value_t *v)
 {
+    // managed only
     if (jl_is_symbol(v))
         return symbol(jl_symbol_name((jl_sym_t*)v));
     if (jl_is_gensym(v)) {
@@ -513,6 +530,8 @@ static value_t julia_to_scm_(jl_value_t *v)
 // this is used to parse a line of repl input
 JL_DLLEXPORT jl_value_t *jl_parse_input_line(const char *str, size_t len)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     value_t s = cvalue_static_cstrn(str, len);
     value_t e = fl_applyn(1, symbol_value(symbol("jl-parse-string")), s);
     if (e == FL_EOF)
@@ -525,6 +544,8 @@ JL_DLLEXPORT jl_value_t *jl_parse_input_line(const char *str, size_t len)
 JL_DLLEXPORT jl_value_t *jl_parse_string(const char *str, size_t len,
                                          int pos0, int greedy)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     value_t s = cvalue_static_cstrn(str, len);
     value_t p = fl_applyn(3, symbol_value(symbol("jl-parse-one-string")),
                           s, fixnum(pos0), greedy?FL_T:FL_F);
@@ -545,6 +566,7 @@ JL_DLLEXPORT jl_value_t *jl_parse_string(const char *str, size_t len,
 
 int jl_start_parsing_file(const char *fname)
 {
+    // unmanaged safe
     value_t s = cvalue_static_cstring(fname);
     if (fl_applyn(1, symbol_value(symbol("jl-parse-file")), s) == FL_F)
         return 1;
@@ -553,11 +575,13 @@ int jl_start_parsing_file(const char *fname)
 
 void jl_stop_parsing(void)
 {
+    // unmanaged safe
     fl_applyn(0, symbol_value(symbol("jl-parser-close-stream")));
 }
 
 JL_DLLEXPORT int jl_parse_depwarn(int warn)
 {
+    // unmanaged safe
     value_t prev = fl_applyn(1, symbol_value(symbol("jl-parser-depwarn")),
                              warn ? FL_T : FL_F);
     return prev == FL_T ? 1 : 0;
@@ -565,6 +589,7 @@ JL_DLLEXPORT int jl_parse_depwarn(int warn)
 
 int jl_parse_deperror(int err)
 {
+    // unmanaged safe
     value_t prev = fl_applyn(1, symbol_value(symbol("jl-parser-deperror")),
                              err ? FL_T : FL_F);
     return prev == FL_T ? 1 : 0;
@@ -572,6 +597,7 @@ int jl_parse_deperror(int err)
 
 jl_value_t *jl_parse_next(void)
 {
+    // unmanaged safe
     value_t c = fl_applyn(0, symbol_value(symbol("jl-parser-next")));
     if (c == FL_EOF)
         return NULL;
@@ -594,6 +620,7 @@ jl_value_t *jl_parse_next(void)
 JL_DLLEXPORT jl_value_t *jl_load_file_string(const char *text, size_t len,
                                              char *filename, size_t namelen)
 {
+    // unmanaged safe
     value_t t, f;
     t = cvalue_static_cstrn(text, len);
     fl_gc_handle(&t);
@@ -606,6 +633,8 @@ JL_DLLEXPORT jl_value_t *jl_load_file_string(const char *text, size_t len,
 // returns either an expression or a thunk
 JL_DLLEXPORT jl_value_t *jl_expand(jl_value_t *expr)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     int np = jl_gc_n_preserved_values();
     value_t arg = julia_to_scm(expr);
     value_t e = fl_applyn(1, symbol_value(symbol("jl-expand-to-thunk")), arg);
@@ -618,6 +647,8 @@ JL_DLLEXPORT jl_value_t *jl_expand(jl_value_t *expr)
 
 JL_DLLEXPORT jl_value_t *jl_macroexpand(jl_value_t *expr)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     int np = jl_gc_n_preserved_values();
     value_t arg = julia_to_scm(expr);
     value_t e = fl_applyn(1, symbol_value(symbol("jl-macroexpand")), arg);
@@ -631,6 +662,7 @@ JL_DLLEXPORT jl_value_t *jl_macroexpand(jl_value_t *expr)
 
 ssize_t jl_max_jlgensym_in(jl_value_t *v)
 {
+    // unmanaged safe
     ssize_t genid = -1;
     if (jl_is_gensym(v)) {
         genid = ((jl_gensym_t*)v)->id;
@@ -650,6 +682,8 @@ ssize_t jl_max_jlgensym_in(jl_value_t *v)
 // wrap expr in a thunk AST
 jl_lambda_info_t *jl_wrap_expr(jl_value_t *expr)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     // `(lambda () (() () () ()) ,expr)
     jl_expr_t *le=NULL, *bo=NULL; jl_value_t *vi=NULL;
     jl_value_t *mt = jl_an_empty_cell;
@@ -679,6 +713,7 @@ jl_lambda_info_t *jl_wrap_expr(jl_value_t *expr)
 // get array of formal argument expressions
 jl_array_t *jl_lam_args(jl_expr_t *l)
 {
+    // unmanaged safe
     assert(jl_is_expr(l));
     assert(l->head == lambda_sym);
     jl_value_t *ae = jl_exprarg(l,0);
@@ -688,6 +723,8 @@ jl_array_t *jl_lam_args(jl_expr_t *l)
 
 jl_sym_t *jl_lam_argname(jl_lambda_info_t *li, int i)
 {
+    // unmanaged safe
+    int8_t gc_state = jl_gc_managed_enter();
     jl_expr_t *ast;
     if (jl_is_expr(li->ast))
         ast = (jl_expr_t*)li->ast;
@@ -695,12 +732,15 @@ jl_sym_t *jl_lam_argname(jl_lambda_info_t *li, int i)
         ast = (jl_expr_t*)jl_uncompress_ast(li, li->ast);
     // NOTE (gc root): `ast` is not rooted here, but jl_lam_args and jl_cellref
     // do not allocate.
-    return (jl_sym_t*)jl_cellref(jl_lam_args(ast),i);
+    jl_sym_t *res = (jl_sym_t*)jl_cellref(jl_lam_args(ast),i);
+    jl_gc_managed_leave(gc_state);
+    return res;
 }
 
 // get array of var info records (for args and locals)
 jl_array_t *jl_lam_vinfo(jl_expr_t *l)
 {
+    // unmanaged safe
     assert(jl_is_expr(l));
     jl_value_t *le = jl_exprarg(l, 1);
     assert(jl_is_array(le));
@@ -712,6 +752,7 @@ jl_array_t *jl_lam_vinfo(jl_expr_t *l)
 // get array of var info records for captured vars
 jl_array_t *jl_lam_capt(jl_expr_t *l)
 {
+    // unmanaged safe
     assert(jl_is_expr(l));
     jl_value_t *le = jl_exprarg(l, 1);
     assert(jl_is_array(le));
@@ -723,6 +764,7 @@ jl_array_t *jl_lam_capt(jl_expr_t *l)
 // get array of types for GenSym vars, or its length (if not type-inferred)
 jl_value_t *jl_lam_gensyms(jl_expr_t *l)
 {
+    // unmanaged safe
     assert(jl_is_expr(l));
     jl_value_t *le = jl_exprarg(l, 1);
     assert(jl_is_array(le));
@@ -733,6 +775,7 @@ jl_value_t *jl_lam_gensyms(jl_expr_t *l)
 // get array of static parameter symbols
 jl_array_t *jl_lam_staticparams(jl_expr_t *l)
 {
+    // unmanaged safe
     assert(jl_is_expr(l));
     jl_value_t *le = jl_exprarg(l, 1);
     assert(jl_is_array(le));
@@ -743,6 +786,7 @@ jl_array_t *jl_lam_staticparams(jl_expr_t *l)
 
 int jl_lam_vars_captured(jl_expr_t *ast)
 {
+    // unmanaged safe
     jl_array_t *vinfos = jl_lam_vinfo(ast);
     for(int i=0; i < jl_array_len(vinfos); i++) {
         if (jl_vinfo_capt((jl_array_t*)jl_cellref(vinfos,i)))
@@ -754,6 +798,7 @@ int jl_lam_vars_captured(jl_expr_t *ast)
 // get array of body forms
 jl_expr_t *jl_lam_body(jl_expr_t *l)
 {
+    // unmanaged safe
     assert(jl_is_expr(l));
     jl_value_t *be = jl_exprarg(l, 2);
     assert(jl_is_expr(be));
@@ -763,6 +808,7 @@ jl_expr_t *jl_lam_body(jl_expr_t *l)
 
 jl_sym_t *jl_decl_var(jl_value_t *ex)
 {
+    // unmanaged safe
     if (jl_is_symbol(ex)) return (jl_sym_t*)ex;
     assert(jl_is_expr(ex));
     return (jl_sym_t*)jl_exprarg(ex, 0);
@@ -770,6 +816,7 @@ jl_sym_t *jl_decl_var(jl_value_t *ex)
 
 JL_DLLEXPORT int jl_is_rest_arg(jl_value_t *ex)
 {
+    // unmanaged safe
     if (!jl_is_expr(ex)) return 0;
     if (((jl_expr_t*)ex)->head != colons_sym) return 0;
     jl_expr_t *atype = (jl_expr_t*)jl_exprarg(ex,1);
@@ -783,6 +830,7 @@ JL_DLLEXPORT int jl_is_rest_arg(jl_value_t *ex)
 
 static jl_value_t *copy_ast(jl_value_t *expr, jl_svec_t *sp, int do_sp)
 {
+    // managed only
     if (jl_is_symbol(expr)) {
         if (!do_sp) return expr;
         // pre-evaluate certain static parameters to help type inference
@@ -861,6 +909,8 @@ static jl_value_t *copy_ast(jl_value_t *expr, jl_svec_t *sp, int do_sp)
 
 JL_DLLEXPORT jl_value_t *jl_copy_ast(jl_value_t *expr)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     if (expr == NULL) {
         return NULL;
     }
@@ -909,6 +959,7 @@ JL_DLLEXPORT jl_value_t *jl_copy_ast(jl_value_t *expr)
 
 static jl_value_t *dont_copy_ast(jl_value_t *expr, jl_svec_t *sp, int do_sp)
 {
+    // managed only
     if (jl_is_symbol(expr) || jl_is_lambda_info(expr)) {
         return copy_ast(expr, sp, do_sp);
     }
@@ -936,6 +987,7 @@ static jl_value_t *dont_copy_ast(jl_value_t *expr, jl_svec_t *sp, int do_sp)
 // TODO: eval decl types for arguments of non-generic functions
 static void eval_decl_types(jl_array_t *vi, jl_value_t *ast, jl_svec_t *spenv)
 {
+    // managed only
     size_t i, l = jl_array_len(vi);
     for(i=0; i < l; i++) {
         jl_array_t *v = (jl_array_t*)jl_cellref(vi, i);
@@ -953,6 +1005,7 @@ static void eval_decl_types(jl_array_t *vi, jl_value_t *ast, jl_svec_t *spenv)
 
 jl_svec_t *jl_svec_tvars_to_symbols(jl_svec_t *t)
 {
+    // managed only
     jl_svec_t *s = jl_alloc_svec_uninit(jl_svec_len(t));
     size_t i;
     for(i=0; i < jl_svec_len(s); i+=2) {
@@ -969,9 +1022,12 @@ jl_svec_t *jl_svec_tvars_to_symbols(jl_svec_t *t)
 // this tree can then be further mutated by optimization passes.
 JL_DLLEXPORT jl_value_t *jl_prepare_ast(jl_lambda_info_t *li, jl_svec_t *sparams)
 {
+    // unmanaged safe
     jl_svec_t *spenv = NULL;
     jl_value_t *ast = li->ast;
-    if (ast == NULL) return NULL;
+    if (ast == NULL)
+        return NULL;
+    int8_t gc_state = jl_gc_managed_enter();
     JL_GC_PUSH2(&spenv, &ast);
     spenv = jl_svec_tvars_to_symbols(sparams);
     if (!jl_is_expr(ast)) {
@@ -993,21 +1049,26 @@ JL_DLLEXPORT jl_value_t *jl_prepare_ast(jl_lambda_info_t *li, jl_svec_t *sparams
     }
     jl_current_module = last_m;
     JL_GC_POP();
+    jl_gc_managed_leave(gc_state);
     return ast;
 }
 
 JL_DLLEXPORT int jl_is_operator(char *sym)
 {
+    // unmanaged safe
     return fl_applyn(1, symbol_value(symbol("operator?")), symbol(sym)) == FL_T;
 }
 
 JL_DLLEXPORT int jl_operator_precedence(char *sym)
 {
-    return numval(fl_applyn(1, symbol_value(symbol("operator-precedence")), symbol(sym)));
+    // unmanaged safe
+    return numval(fl_applyn(1, symbol_value(symbol("operator-precedence")),
+                            symbol(sym)));
 }
 
 jl_value_t *skip_meta(jl_array_t *body)
 {
+    // unmanaged safe
     jl_value_t *body1 = jl_cellref(body,0);
     if (jl_is_expr(body1) && ((jl_expr_t*)body1)->head == meta_sym
         && jl_array_len(body) > 1)
@@ -1017,6 +1078,7 @@ jl_value_t *skip_meta(jl_array_t *body)
 
 int has_meta(jl_array_t *body, jl_sym_t *sym)
 {
+    // unmanaged safe
     size_t i, l = jl_array_len(body);
     for (i = 0; i < l; i++) {
         jl_expr_t *stmt = (jl_expr_t*)jl_cellref(body, i);
@@ -1033,6 +1095,7 @@ int has_meta(jl_array_t *body, jl_sym_t *sym)
 
 int jl_in_vinfo_array(jl_array_t *a, jl_sym_t *v)
 {
+    // unmanaged safe
     size_t i, l=jl_array_len(a);
     for(i=0; i<l; i++) {
         if (jl_cellref(jl_cellref(a,i),0) == (jl_value_t*)v)
@@ -1043,6 +1106,7 @@ int jl_in_vinfo_array(jl_array_t *a, jl_sym_t *v)
 
 int jl_in_sym_array(jl_array_t *a, jl_sym_t *v)
 {
+    // unmanaged safe
     size_t i, l=jl_array_len(a);
     for(i=0; i<l; i++) {
         if (jl_cellref(a,i) == (jl_value_t*)v)
@@ -1053,6 +1117,7 @@ int jl_in_sym_array(jl_array_t *a, jl_sym_t *v)
 
 int jl_local_in_ast(jl_expr_t *ast, jl_sym_t *sym)
 {
+    // unmanaged safe
     return jl_in_vinfo_array(jl_lam_vinfo(ast), sym) ||
         jl_in_vinfo_array(jl_lam_capt(ast), sym) ||
         jl_in_sym_array(jl_lam_staticparams(ast), sym);
@@ -1062,6 +1127,7 @@ JL_CALLABLE(jl_f_get_field);
 
 static jl_value_t *resolve_globals(jl_value_t *expr, jl_lambda_info_t *lam)
 {
+    // GC disabled
     if (jl_is_symbol(expr)) {
         if (lam->module == NULL)
             return expr;

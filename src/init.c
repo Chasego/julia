@@ -156,6 +156,7 @@ static struct uv_shutdown_queue_item *next_shutdown_queue_item(struct uv_shutdow
 
 JL_DLLEXPORT void jl_atexit_hook(int exitcode)
 {
+    // exit only
     if (exitcode == 0) julia_save();
     jl_print_gc_stats(JL_STDERR);
     if (jl_options.code_coverage)
@@ -262,7 +263,7 @@ void *jl_winsock_handle;
 
 uv_loop_t *jl_io_loop;
 
-void *init_stdio_handle(uv_file fd,int readable)
+static void *init_stdio_handle(uv_file fd,int readable)
 {
     void *handle;
     uv_handle_type type = uv_guess_handle(fd);
@@ -705,6 +706,7 @@ jl_function_t *jl_typeinf_func=NULL;
 
 JL_DLLEXPORT void jl_set_typeinf_func(jl_value_t* f)
 {
+    // unmanaged safe
     if (!jl_is_function(f))
         jl_error("jl_set_typeinf_func must set a jl_function_t*");
     jl_typeinf_func = (jl_function_t*)f;
@@ -723,6 +725,7 @@ static jl_value_t *basemod(char *name)
 // fetch references to things defined in boot.jl
 void jl_get_builtin_hooks(void)
 {
+    // init only
     int t;
     for(t=0; t < jl_n_threads; t++) {
         jl_all_task_states[t].ptls->root_task->tls = jl_nothing;
@@ -774,6 +777,7 @@ void jl_get_builtin_hooks(void)
 
 JL_DLLEXPORT void jl_get_system_hooks(void)
 {
+    // init only
     if (jl_errorexception_type) return; // only do this once
 
     jl_errorexception_type = (jl_datatype_t*)basemod("ErrorException");

@@ -22,6 +22,7 @@ int jl_is_toplevel_only_expr(jl_value_t *e);
 
 jl_value_t *jl_interpret_toplevel_expr(jl_value_t *e)
 {
+    // managed only
     return eval(e, NULL, 0, 0);
 }
 
@@ -30,9 +31,11 @@ JL_DLLEXPORT jl_value_t *jl_interpret_toplevel_expr_in(jl_module_t *m,
                                                        jl_value_t **locals,
                                                        size_t nl)
 {
+    // unmanaged safe
     jl_value_t *v=NULL;
     jl_module_t *last_m = jl_current_module;
     jl_module_t *task_last_m = jl_current_task->current_module;
+    int8_t gc_state = jl_gc_managed_enter();
     JL_TRY {
         jl_current_task->current_module = jl_current_module = m;
         v = eval(e, locals, nl, 0);
@@ -44,13 +47,16 @@ JL_DLLEXPORT jl_value_t *jl_interpret_toplevel_expr_in(jl_module_t *m,
     }
     jl_current_module = last_m;
     jl_current_task->current_module = task_last_m;
+    jl_gc_managed_leave(gc_state);
     assert(v);
     return v;
 }
 
 static jl_value_t *do_call(jl_function_t *f, jl_value_t **args, size_t nargs,
-                           jl_value_t *eval0, jl_value_t **locals, size_t nl, size_t ngensym)
+                           jl_value_t *eval0, jl_value_t **locals, size_t nl,
+                           size_t ngensym)
 {
+    // managed only
     jl_value_t **argv;
     JL_GC_PUSHARGS(argv, nargs+1);
     size_t i;
@@ -69,13 +75,17 @@ static jl_value_t *do_call(jl_function_t *f, jl_value_t **args, size_t nargs,
 
 jl_value_t *jl_eval_global_var(jl_module_t *m, jl_sym_t *e)
 {
+    // unmanaged safe
+    int8_t gc_state = jl_gc_managed_enter();
     jl_value_t *v = jl_get_global(m, e);
     if (v == NULL)
         jl_undefined_var_error(e);
+    jl_gc_managed_leave(gc_state);
     return v;
 }
 
-void jl_check_static_parameter_conflicts(jl_lambda_info_t *li, jl_svec_t *t, jl_sym_t *fname);
+void jl_check_static_parameter_conflicts(jl_lambda_info_t *li, jl_svec_t *t,
+                                         jl_sym_t *fname);
 
 int jl_has_intrinsics(jl_expr_t *ast, jl_expr_t *e, jl_module_t *m);
 
@@ -85,6 +95,7 @@ extern int inside_typedef;
 // this is a heuristic for allowing "redefining" a type to something identical
 static int equiv_type(jl_datatype_t *dta, jl_datatype_t *dtb)
 {
+    // unmanaged safe
     return (jl_typeof(dta) == jl_typeof(dtb) &&
             // TODO: can't yet handle parametric types due to how constructors work
             dta->parameters == jl_emptysvec &&
@@ -101,6 +112,7 @@ static int equiv_type(jl_datatype_t *dta, jl_datatype_t *dtb)
 
 static void check_can_assign_type(jl_binding_t *b)
 {
+    // unmanaged safe
     if (b->constp && b->value != NULL && !jl_is_datatype(b->value))
         jl_errorf("invalid redefinition of constant %s",
                   jl_symbol_name(b->name));
@@ -108,6 +120,7 @@ static void check_can_assign_type(jl_binding_t *b)
 
 static jl_value_t *eval(jl_value_t *e, jl_value_t **locals, size_t nl, size_t ngensym)
 {
+    // managed only
     if (jl_is_symbol(e)) {
         jl_value_t *v;
         size_t i;
@@ -506,6 +519,7 @@ static jl_value_t *eval(jl_value_t *e, jl_value_t **locals, size_t nl, size_t ng
 
 static int label_idx(long ltgt, jl_array_t *stmts)
 {
+    // unmanaged safe
     size_t j;
     for(j=0; j < stmts->nrows; j++) {
         jl_value_t *l = jl_cellref(stmts,j);
@@ -518,6 +532,7 @@ static int label_idx(long ltgt, jl_array_t *stmts)
 
 jl_value_t *jl_toplevel_eval_body(jl_array_t *stmts)
 {
+    // managed only
     ssize_t ngensym = 0;
     size_t i, l = jl_array_len(stmts);
     for (i = 0; i < l; i++) {
@@ -535,9 +550,10 @@ jl_value_t *jl_toplevel_eval_body(jl_array_t *stmts)
     return ret;
 }
 
-static jl_value_t *eval_body(jl_array_t *stmts, jl_value_t **locals, size_t nl, size_t ngensym,
-                             int start, int toplevel)
+static jl_value_t *eval_body(jl_array_t *stmts, jl_value_t **locals, size_t nl,
+                             size_t ngensym, int start, int toplevel)
 {
+    // managed only
     jl_handler_t __eh;
     size_t i=start;
 
@@ -607,6 +623,7 @@ static jl_value_t *eval_body(jl_array_t *stmts, jl_value_t **locals, size_t nl, 
 jl_value_t *jl_interpret_toplevel_thunk_with(jl_lambda_info_t *lam,
                                              jl_value_t **loc, size_t nl)
 {
+    // managed only
     jl_expr_t *ast = (jl_expr_t*)lam->ast;
     jl_array_t *stmts = jl_lam_body(ast)->args;
     size_t nargs = jl_array_len(jl_lam_args(ast));
@@ -634,6 +651,7 @@ jl_value_t *jl_interpret_toplevel_thunk_with(jl_lambda_info_t *lam,
 
 jl_value_t *jl_interpret_toplevel_thunk(jl_lambda_info_t *lam)
 {
+    // managed only
     return jl_interpret_toplevel_thunk_with(lam, NULL, 0);
 }
 

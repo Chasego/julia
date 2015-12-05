@@ -986,6 +986,7 @@ JL_DLLEXPORT int jl_gc_n_preserved_values(void)
 
 JL_DLLEXPORT void jl_gc_preserve(jl_value_t *v)
 {
+    // managed only
     FOR_CURRENT_HEAP () {
         arraylist_push(&preserved_values, (void*)v);
     }
@@ -993,6 +994,7 @@ JL_DLLEXPORT void jl_gc_preserve(jl_value_t *v)
 
 JL_DLLEXPORT void jl_gc_unpreserve(void)
 {
+    // managed only
     FOR_CURRENT_HEAP () {
         (void)arraylist_pop(&preserved_values);
     }
@@ -1002,6 +1004,7 @@ JL_DLLEXPORT void jl_gc_unpreserve(void)
 
 JL_DLLEXPORT jl_weakref_t *jl_gc_new_weakref(jl_value_t *value)
 {
+    JL_RETURN_NULL_IF_UNMANAGED();
     jl_weakref_t *wr = (jl_weakref_t*)jl_gc_alloc_1w();
     jl_set_typeof(wr, jl_weakref_type);
     wr->value = value;  // NOTE: wb not needed here
@@ -1138,6 +1141,7 @@ static void sweep_big(int sweep_mask)
 
 void jl_gc_track_malloced_array(jl_array_t *a)
 {
+    // managed only
     FOR_CURRENT_HEAP () {
         mallocarray_t *ma;
         if (mafreelist == NULL) {
@@ -1170,6 +1174,7 @@ static size_t array_nbytes(jl_array_t *a)
 
 static void jl_gc_free_array(jl_array_t *a)
 {
+    // managed only
     if (a->how == 2) {
         char *d = (char*)a->data - a->offset*a->elsize;
         if (a->isaligned)
@@ -1650,6 +1655,7 @@ static void reset_remset(void)
 
 JL_DLLEXPORT void jl_gc_queue_root(jl_value_t *ptr)
 {
+    // managed only
     FOR_CURRENT_HEAP () {
         jl_taggedvalue_t *o = jl_astaggedvalue(ptr);
         assert(gc_bits(o) != GC_QUEUED);
@@ -1661,6 +1667,7 @@ JL_DLLEXPORT void jl_gc_queue_root(jl_value_t *ptr)
 
 void gc_queue_binding(jl_binding_t *bnd)
 {
+    // managed only
     FOR_CURRENT_HEAP () {
         buff_t *buf = gc_val_buf(bnd);
         assert(gc_bits(buf) != GC_QUEUED);
@@ -1691,6 +1698,7 @@ static inline int gc_push_root(void *v, int d) // v isa jl_value_t*
 
 void jl_gc_setmark(jl_value_t *v) // TODO rename this as it is misleading now
 {
+    // in GC only
     //    int64_t s = perm_scanned_bytes;
     jl_taggedvalue_t *o = jl_astaggedvalue(v);
     if (!gc_marked(o)) {
@@ -2545,6 +2553,8 @@ void *reallocb(void *b, size_t sz)
 
 JL_DLLEXPORT jl_value_t *jl_gc_allocobj(size_t sz)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     size_t allocsz = sz + sizeof_jl_taggedvalue_t;
     if (allocsz < sz) // overflow in adding offs, size was "negative"
         jl_throw(jl_memory_exception);
@@ -2561,6 +2571,8 @@ JL_DLLEXPORT jl_value_t *jl_gc_allocobj(size_t sz)
 
 JL_DLLEXPORT jl_value_t *jl_gc_alloc_0w(void)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     const int sz = sizeof_jl_taggedvalue_t;
     void *tag = NULL;
 #ifdef MEMDEBUG
@@ -2574,6 +2586,8 @@ JL_DLLEXPORT jl_value_t *jl_gc_alloc_0w(void)
 
 JL_DLLEXPORT jl_value_t *jl_gc_alloc_1w(void)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     const int sz = LLT_ALIGN(sizeof_jl_taggedvalue_t + sizeof(void*), 16);
     void *tag = NULL;
 #ifdef MEMDEBUG
@@ -2587,6 +2601,8 @@ JL_DLLEXPORT jl_value_t *jl_gc_alloc_1w(void)
 
 JL_DLLEXPORT jl_value_t *jl_gc_alloc_2w(void)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     const int sz = LLT_ALIGN(sizeof_jl_taggedvalue_t + sizeof(void*) * 2, 16);
     void *tag = NULL;
 #ifdef MEMDEBUG
@@ -2600,6 +2616,8 @@ JL_DLLEXPORT jl_value_t *jl_gc_alloc_2w(void)
 
 JL_DLLEXPORT jl_value_t *jl_gc_alloc_3w(void)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     const int sz = LLT_ALIGN(sizeof_jl_taggedvalue_t + sizeof(void*) * 3, 16);
     void *tag = NULL;
 #ifdef MEMDEBUG
@@ -2817,9 +2835,12 @@ static void big_obj_stats(void)
 
 JL_DLLEXPORT void *jl_gc_counted_malloc(size_t sz)
 {
+    // unmanaged safe
     maybe_collect();
+    int8_t gc_state = jl_gc_managed_enter();
     allocd_bytes += sz;
     gc_num.malloc++;
+    jl_gc_managed_leave(gc_state);
     void *b = malloc(sz);
     if (b == NULL)
         jl_throw(jl_memory_exception);
@@ -2828,9 +2849,12 @@ JL_DLLEXPORT void *jl_gc_counted_malloc(size_t sz)
 
 JL_DLLEXPORT void *jl_gc_counted_calloc(size_t nm, size_t sz)
 {
+    // unmanaged safe
     maybe_collect();
+    int8_t gc_state = jl_gc_managed_enter();
     allocd_bytes += nm*sz;
     gc_num.malloc++;
+    jl_gc_managed_leave(gc_state);
     void *b = calloc(nm, sz);
     if (b == NULL)
         jl_throw(jl_memory_exception);
@@ -2839,21 +2863,27 @@ JL_DLLEXPORT void *jl_gc_counted_calloc(size_t nm, size_t sz)
 
 JL_DLLEXPORT void jl_gc_counted_free(void *p, size_t sz)
 {
+    // unmanaged safe
     free(p);
+    int8_t gc_state = jl_gc_managed_enter();
     freed_bytes += sz;
     gc_num.freecall++;
+    jl_gc_managed_leave(gc_state);
 }
 
 JL_DLLEXPORT void *jl_gc_counted_realloc_with_old_size(void *p, size_t old,
                                                        size_t sz)
 {
+    // unmanaged safe
     maybe_collect();
 
+    int8_t gc_state = jl_gc_managed_enter();
     if (sz < old)
        freed_bytes += (old - sz);
     else
        allocd_bytes += (sz - old);
     gc_num.realloc++;
+    jl_gc_managed_leave(gc_state);
     void *b = realloc(p, sz);
     if (b == NULL)
         jl_throw(jl_memory_exception);
@@ -2862,6 +2892,7 @@ JL_DLLEXPORT void *jl_gc_counted_realloc_with_old_size(void *p, size_t old,
 
 JL_DLLEXPORT void *jl_malloc(size_t sz)
 {
+    // unmanaged safe
     int64_t *p = (int64_t *)jl_gc_counted_malloc(sz + 16);
     p[0] = sz;
     return (void *)(p + 2);
@@ -2869,6 +2900,7 @@ JL_DLLEXPORT void *jl_malloc(size_t sz)
 
 JL_DLLEXPORT void *jl_calloc(size_t nm, size_t sz)
 {
+    // unmanaged safe
     int64_t *p;
     size_t nmsz = nm*sz;
     p = (int64_t *)jl_gc_counted_calloc(nmsz + 16, 1);
@@ -2878,6 +2910,7 @@ JL_DLLEXPORT void *jl_calloc(size_t nm, size_t sz)
 
 JL_DLLEXPORT void jl_free(void *p)
 {
+    // unmanaged safe
     int64_t *pp = (int64_t *)p - 2;
     size_t sz = pp[0];
     jl_gc_counted_free(pp, sz + 16);
@@ -2885,6 +2918,7 @@ JL_DLLEXPORT void jl_free(void *p)
 
 JL_DLLEXPORT void *jl_realloc(void *p, size_t sz)
 {
+    // unmanaged safe
     int64_t *pp = (int64_t *)p - 2;
     size_t szold = pp[0];
     int64_t *pnew = (int64_t *)jl_gc_counted_realloc_with_old_size(pp, szold + 16, sz + 16);
@@ -2894,12 +2928,15 @@ JL_DLLEXPORT void *jl_realloc(void *p, size_t sz)
 
 JL_DLLEXPORT void *jl_gc_managed_malloc(size_t sz)
 {
+    // unmanaged safe
     maybe_collect();
     size_t allocsz = LLT_ALIGN(sz, 16);
     if (allocsz < sz)  // overflow in adding offs, size was "negative"
         jl_throw(jl_memory_exception);
+    int8_t gc_state = jl_gc_managed_enter();
     allocd_bytes += allocsz;
     gc_num.malloc++;
+    jl_gc_managed_leave(gc_state);
     void *b = malloc_a16(allocsz);
     if (b == NULL)
         jl_throw(jl_memory_exception);
@@ -2909,6 +2946,10 @@ JL_DLLEXPORT void *jl_gc_managed_malloc(size_t sz)
 JL_DLLEXPORT void *jl_gc_managed_realloc(void *d, size_t sz, size_t oldsz,
                                          int isaligned, jl_value_t* owner)
 {
+    // managed only
+    // This can easily be sync'd to the GC but given the buffer is owned
+    // by `owner` there's little point of allowing GC to run before
+    // updating the reference in the owner.
     maybe_collect();
 
     size_t allocsz = LLT_ALIGN(sz, 16);

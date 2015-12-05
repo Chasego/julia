@@ -468,6 +468,7 @@ public:
 extern "C"
 char *jl_demangle(const char *name)
 {
+    // unmanaged safe
     const char *start = name + 6;
     const char *end = name + strlen(name);
     char *ret;
@@ -494,11 +495,12 @@ JITEventListener* CreateJuliaJITEventListener()
 }
 
 // *name and *filename are either NULL or malloc'd pointers
-void lookup_pointer(DIContext *context, char **name, size_t *line,
-                    char **filename, size_t *inlinedat_line,
-                    char **inlinedat_file, size_t pointer,
-                    int demangle, int *fromC)
+static void lookup_pointer(DIContext *context, char **name, size_t *line,
+                           char **filename, size_t *inlinedat_line,
+                           char **inlinedat_file, size_t pointer,
+                           int demangle, int *fromC)
 {
+    // unmanaged safe
     DILineInfo info, topinfo;
     DIInliningInfo inlineinfo;
     if (demangle && *name != NULL) {
@@ -576,7 +578,7 @@ typedef std::map<uint64_t, objfileentry_t> obfiletype;
 static obfiletype objfilemap;
 
 #ifdef _OS_DARWIN_
-bool getObjUUID(llvm::object::MachOObjectFile *obj, uint8_t uuid[16])
+static bool getObjUUID(llvm::object::MachOObjectFile *obj, uint8_t uuid[16])
 {
 
 # ifdef LLVM37
@@ -616,10 +618,12 @@ bool getObjUUID(llvm::object::MachOObjectFile *obj, uint8_t uuid[16])
 extern "C" uint64_t jl_sysimage_base;
 
 // *name and *filename should be either NULL or malloc'd pointer
-void jl_getDylibFunctionInfo(char **name, char **filename, size_t *line,
-                             char** inlinedat_file, size_t *inlinedat_line,
-                             size_t pointer, int *fromC, int skipC, int skipInline)
+static void jl_getDylibFunctionInfo(char **name, char **filename, size_t *line,
+                                    char** inlinedat_file,
+                                    size_t *inlinedat_line, size_t pointer,
+                                    int *fromC, int skipC, int skipInline)
 {
+    // unmanaged safe
 #ifdef _OS_WINDOWS_
     IMAGEHLP_MODULE64 ModuleInfo;
     BOOL isvalid;
@@ -829,6 +833,7 @@ void jl_getFunctionInfo(char **name, char **filename, size_t *line,
                         char **inlinedat_file, size_t *inlinedat_line,
                         size_t pointer, int *fromC, int skipC, int skipInline)
 {
+    // unmanaged safe
     *name = NULL;
     *line = -1;
     *filename = NULL;
@@ -950,6 +955,7 @@ int jl_get_llvmf_info(uint64_t fptr, uint64_t *symsize, uint64_t *slide,
 #endif
     )
 {
+    // unmanaged safe
     int found = 0;
 #ifndef USE_MCJIT
     std::map<size_t, FuncInfo, revcomp> &fmap = jl_jit_events->getMap();
@@ -1072,6 +1078,7 @@ RTDyldMemoryManager* createRTDyldMemoryManagerOSX()
 extern "C"
 DWORD64 jl_getUnwindInfo(ULONG64 dwAddr)
 {
+    // unmanaged safe
     std::map<size_t, ObjectInfo, revcomp> &objmap = jl_jit_events->getObjectMap();
     std::map<size_t, ObjectInfo, revcomp>::iterator it = objmap.lower_bound(dwAddr);
     DWORD64 ipstart = 0; // ip of the first instruction in the function (if found)
@@ -1175,6 +1182,7 @@ JITMemoryManager* createJITMemoryManagerWin()
 extern "C"
 DWORD64 jl_getUnwindInfo(ULONG64 dwAddr)
 {
+    // unmanaged safe
     std::map<size_t, FuncInfo, revcomp> &info = jl_jit_events->getMap();
     std::map<size_t, FuncInfo, revcomp>::iterator it = info.lower_bound(dwAddr);
     DWORD64 ipstart = 0; // ip of the first instruction in the function (if found)

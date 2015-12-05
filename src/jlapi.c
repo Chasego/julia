@@ -34,6 +34,7 @@ JL_DLLEXPORT int jl_is_initialized(void) { return jl_main_module!=NULL; }
 JL_DLLEXPORT void jl_init_with_image(const char *julia_home_dir,
                                      const char *image_relative_path)
 {
+    // init only
     if (jl_is_initialized()) return;
     libsupport_init();
     jl_options.julia_home = julia_home_dir;
@@ -45,17 +46,21 @@ JL_DLLEXPORT void jl_init_with_image(const char *julia_home_dir,
 
 JL_DLLEXPORT void jl_init(const char *julia_home_dir)
 {
+    // init only
     jl_init_with_image(julia_home_dir, NULL);
 }
 
 JL_DLLEXPORT void *jl_eval_string(const char *str)
 {
+    // unmanaged safe
     jl_value_t *r;
     JL_TRY {
+        int8_t gc_state = jl_gc_managed_enter();
         jl_value_t *ast = jl_parse_input_line(str, strlen(str));
         JL_GC_PUSH1(&ast);
         r = jl_toplevel_eval(ast);
         JL_GC_POP();
+        jl_gc_managed_leave(gc_state);
         jl_exception_clear();
     }
     JL_CATCH {
@@ -67,18 +72,21 @@ JL_DLLEXPORT void *jl_eval_string(const char *str)
 
 JL_DLLEXPORT jl_value_t *jl_exception_occurred(void)
 {
+    // unmanaged safe
     return jl_exception_in_transit == jl_nothing ? NULL :
         jl_exception_in_transit;
 }
 
 JL_DLLEXPORT void jl_exception_clear(void)
 {
+    // unmanaged safe
     jl_exception_in_transit = jl_nothing;
 }
 
 // get the name of a type as a string
 JL_DLLEXPORT const char *jl_typename_str(jl_value_t *v)
 {
+    // unmanaged safe
     if (!jl_is_datatype(v))
         return NULL;
     return jl_symbol_name(((jl_datatype_t*)v)->name->name);
@@ -87,41 +95,49 @@ JL_DLLEXPORT const char *jl_typename_str(jl_value_t *v)
 // get the name of typeof(v) as a string
 JL_DLLEXPORT const char *jl_typeof_str(jl_value_t *v)
 {
+    // unmanaged safe
     return jl_typename_str((jl_value_t*)jl_typeof(v));
 }
 
 JL_DLLEXPORT void *jl_array_eltype(jl_value_t *a)
 {
+    // unmanaged safe
     return jl_tparam0(jl_typeof(a));
 }
 
 JL_DLLEXPORT int jl_array_rank(jl_value_t *a)
 {
+    // unmanaged safe
     return jl_array_ndims(a);
 }
 
 JL_DLLEXPORT size_t jl_array_size(jl_value_t *a, int d)
 {
+    // unmanaged safe
     return jl_array_dim(a, d);
 }
 
 JL_DLLEXPORT const char *jl_bytestring_ptr(jl_value_t *s)
 {
+    // unmanaged safe
     return jl_string_data(s);
 }
 
 JL_DLLEXPORT jl_value_t *jl_call(jl_function_t *f, jl_value_t **args,
                                  int32_t nargs)
 {
+    // unmanaged safe
     jl_value_t *v;
     JL_TRY {
         jl_value_t **argv;
+        int8_t gc_state = jl_gc_managed_enter();
         JL_GC_PUSHARGS(argv, nargs+1);
         argv[0] = (jl_value_t*) f;
         for(int i=1; i<nargs+1; i++)
             argv[i] = args[i-1];
         v = jl_apply(f, args, nargs);
         JL_GC_POP();
+        jl_gc_managed_leave(gc_state);
         jl_exception_clear();
     }
     JL_CATCH {
@@ -132,11 +148,14 @@ JL_DLLEXPORT jl_value_t *jl_call(jl_function_t *f, jl_value_t **args,
 
 JL_DLLEXPORT jl_value_t *jl_call0(jl_function_t *f)
 {
+    // unmanaged safe
     jl_value_t *v;
     JL_TRY {
+        int8_t gc_state = jl_gc_managed_enter();
         JL_GC_PUSH1(&f);
         v = jl_apply(f, NULL, 0);
         JL_GC_POP();
+        jl_gc_managed_leave(gc_state);
         jl_exception_clear();
     }
     JL_CATCH {
@@ -147,11 +166,14 @@ JL_DLLEXPORT jl_value_t *jl_call0(jl_function_t *f)
 
 JL_DLLEXPORT jl_value_t *jl_call1(jl_function_t *f, jl_value_t *a)
 {
+    // unmanaged safe
     jl_value_t *v;
     JL_TRY {
+        int8_t gc_state = jl_gc_managed_enter();
         JL_GC_PUSH2(&f,&a);
         v = jl_apply(f, &a, 1);
         JL_GC_POP();
+        jl_gc_managed_leave(gc_state);
         jl_exception_clear();
     }
     JL_CATCH {
@@ -162,12 +184,15 @@ JL_DLLEXPORT jl_value_t *jl_call1(jl_function_t *f, jl_value_t *a)
 
 JL_DLLEXPORT jl_value_t *jl_call2(jl_function_t *f, jl_value_t *a, jl_value_t *b)
 {
+    // unmanaged safe
     jl_value_t *v;
     JL_TRY {
+        int8_t gc_state = jl_gc_managed_enter();
         JL_GC_PUSH3(&f,&a,&b);
         jl_value_t *args[2] = {a,b};
         v = jl_apply(f, args, 2);
         JL_GC_POP();
+        jl_gc_managed_leave(gc_state);
         jl_exception_clear();
     }
     JL_CATCH {
@@ -179,12 +204,15 @@ JL_DLLEXPORT jl_value_t *jl_call2(jl_function_t *f, jl_value_t *a, jl_value_t *b
 JL_DLLEXPORT jl_value_t *jl_call3(jl_function_t *f, jl_value_t *a,
                                   jl_value_t *b, jl_value_t *c)
 {
+    // unmanaged safe
     jl_value_t *v;
     JL_TRY {
+        int8_t gc_state = jl_gc_managed_enter();
         JL_GC_PUSH4(&f,&a,&b,&c);
         jl_value_t *args[3] = {a,b,c};
         v = jl_apply(f, args, 3);
         JL_GC_POP();
+        jl_gc_managed_leave(gc_state);
         jl_exception_clear();
     }
     JL_CATCH {
@@ -195,6 +223,7 @@ JL_DLLEXPORT jl_value_t *jl_call3(jl_function_t *f, jl_value_t *a,
 
 JL_DLLEXPORT void jl_yield(void)
 {
+    // unmanaged safe
     static jl_function_t *yieldfunc = NULL;
     if (yieldfunc == NULL)
         yieldfunc = (jl_function_t*)jl_get_global(jl_base_module, jl_symbol("yield"));
@@ -204,11 +233,14 @@ JL_DLLEXPORT void jl_yield(void)
 
 JL_DLLEXPORT jl_value_t *jl_get_field(jl_value_t *o, const char *fld)
 {
+    // unmanaged safe
     jl_value_t *v;
     JL_TRY {
+        int8_t gc_state = jl_gc_managed_enter();
         jl_value_t *s = (jl_value_t*)jl_symbol(fld);
         int i = jl_field_index((jl_datatype_t*)jl_typeof(o), (jl_sym_t*)s, 1);
         v = jl_get_nth_field(o, i);
+        jl_gc_managed_leave(gc_state);
         jl_exception_clear();
     }
     JL_CATCH {
@@ -219,11 +251,13 @@ JL_DLLEXPORT jl_value_t *jl_get_field(jl_value_t *o, const char *fld)
 
 JL_DLLEXPORT void jl_sigatomic_begin(void)
 {
+    // unmanaged safe
     JL_SIGATOMIC_BEGIN();
 }
 
 JL_DLLEXPORT void jl_sigatomic_end(void)
 {
+    // unmanaged safe
     if (jl_defer_signal == 0)
         jl_error("sigatomic_end called in non-sigatomic region");
     JL_SIGATOMIC_END();
@@ -240,46 +274,55 @@ JL_DLLEXPORT int jl_is_debugbuild(void)
 
 JL_DLLEXPORT jl_value_t *jl_get_julia_home(void)
 {
+    // unmanaged safe
     return jl_cstr_to_string(jl_options.julia_home);
 }
 
 JL_DLLEXPORT jl_value_t *jl_get_julia_bin(void)
 {
+    // unmanaged safe
     return jl_cstr_to_string(jl_options.julia_bin);
 }
 
 JL_DLLEXPORT jl_value_t *jl_get_image_file(void)
 {
+    // unmanaged safe
     return jl_cstr_to_string(jl_options.image_file);
 }
 
 JL_DLLEXPORT int jl_ver_major(void)
 {
+    // unmanaged safe
     return JULIA_VERSION_MAJOR;
 }
 
 JL_DLLEXPORT int jl_ver_minor(void)
 {
+    // unmanaged safe
     return JULIA_VERSION_MINOR;
 }
 
 JL_DLLEXPORT int jl_ver_patch(void)
 {
+    // unmanaged safe
     return JULIA_VERSION_PATCH;
 }
 
 JL_DLLEXPORT int jl_ver_is_release(void)
 {
+    // unmanaged safe
     return JULIA_VERSION_IS_RELEASE;
 }
 
 JL_DLLEXPORT const char* jl_ver_string(void)
 {
+    // unmanaged safe
    return JULIA_VERSION_STRING;
 }
 
 // return char* from ByteString field in Base.GIT_VERSION_INFO
-static const char *git_info_string(const char *fld) {
+static const char *git_info_string(const char *fld)
+{
     static jl_value_t *GIT_VERSION_INFO = NULL;
     if (!GIT_VERSION_INFO)
         GIT_VERSION_INFO = jl_get_global(jl_base_module, jl_symbol("GIT_VERSION_INFO"));
@@ -290,6 +333,7 @@ static const char *git_info_string(const char *fld) {
 
 JL_DLLEXPORT const char *jl_git_branch(void)
 {
+    // unmanaged safe
     static const char *branch = NULL;
     if (!branch) branch = git_info_string("branch");
     return branch;
@@ -297,6 +341,7 @@ JL_DLLEXPORT const char *jl_git_branch(void)
 
 JL_DLLEXPORT const char *jl_git_commit(void)
 {
+    // unmanaged safe
     static const char *commit = NULL;
     if (!commit) commit = git_info_string("commit");
     return commit;

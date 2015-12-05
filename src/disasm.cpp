@@ -189,11 +189,11 @@ MCSymbol *SymbolTable::lookupSymbol(uint64_t addr)
     return Table[addr];
 }
 
-const char *SymbolLookup(void *DisInfo,
-                         uint64_t ReferenceValue,
-                         uint64_t *ReferenceType,
-                         uint64_t ReferencePC,
-                         const char **ReferenceName)
+static const char *SymbolLookup(void *DisInfo,
+                                uint64_t ReferenceValue,
+                                uint64_t *ReferenceType,
+                                uint64_t ReferencePC,
+                                const char **ReferenceName)
 {
     SymbolTable *SymTab = (SymbolTable*)DisInfo;
     if (SymTab->getPass() != 0) {
@@ -210,9 +210,9 @@ const char *SymbolLookup(void *DisInfo,
     return NULL;
 }
 
-int OpInfoLookup(void *DisInfo, uint64_t PC,
-                 uint64_t Offset, uint64_t Size,
-                 int TagType, void *TagBuf)
+static int OpInfoLookup(void *DisInfo, uint64_t PC,
+                        uint64_t Offset, uint64_t Size,
+                        int TagType, void *TagBuf)
 {
     SymbolTable *SymTab = (SymbolTable*)DisInfo;
     PC += SymTab->getIP() - (uint64_t)(uintptr_t)SymTab->getMemoryObject().data(); // add offset from MemoryObject base
@@ -284,6 +284,7 @@ void jl_dump_asm_internal(uintptr_t Fptr, size_t Fsize, size_t slide,
 #endif
                           )
 {
+    // unmanaged safe
     // Initialize targets and assembly printers/parsers.
     // Avoids hard-coded targets - will generally be only host CPU anyway.
     llvm::InitializeNativeTargetAsmParser();

@@ -113,6 +113,8 @@ typedef struct {
 // Note that this function updates len
 static jl_value_t *jl_new_bits_internal(jl_value_t *dt, void *data, size_t *len)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     if (jl_is_ntuple_type(dt)) {
         jl_value_t *lenvar = jl_tparam0(dt);
         jl_value_t *elty = jl_tparam1(dt);
@@ -155,12 +157,14 @@ static jl_value_t *jl_new_bits_internal(jl_value_t *dt, void *data, size_t *len)
 
 JL_DLLEXPORT jl_value_t *jl_new_bits(jl_value_t *bt, void *data)
 {
+    // unmanaged safe
     size_t len = 0;
     return jl_new_bits_internal(bt, data, &len);
 }
 
 void jl_assign_bits(void *dest, jl_value_t *bits)
 {
+    // unmanaged safe
     size_t nb = jl_datatype_size(jl_typeof(bits));
     if (nb == 0) return;
     switch (nb) {
@@ -175,6 +179,7 @@ void jl_assign_bits(void *dest, jl_value_t *bits)
 
 JL_DLLEXPORT int jl_field_index(jl_datatype_t *t, jl_sym_t *fld, int err)
 {
+    // unmanaged safe
     jl_svec_t *fn = t->name->names;
     for(size_t i=0; i < jl_svec_len(fn); i++) {
         if (jl_svecref(fn,i) == (jl_value_t*)fld) {
@@ -189,6 +194,7 @@ JL_DLLEXPORT int jl_field_index(jl_datatype_t *t, jl_sym_t *fld, int err)
 
 JL_DLLEXPORT jl_value_t *jl_get_nth_field(jl_value_t *v, size_t i)
 {
+    // unmanaged safe
     jl_datatype_t *st = (jl_datatype_t*)jl_typeof(v);
     assert(i < jl_datatype_nfields(st));
     size_t offs = jl_field_offset(st,i);
@@ -200,6 +206,7 @@ JL_DLLEXPORT jl_value_t *jl_get_nth_field(jl_value_t *v, size_t i)
 
 JL_DLLEXPORT jl_value_t *jl_get_nth_field_checked(jl_value_t *v, size_t i)
 {
+    // unmanaged safe
     jl_datatype_t *st = (jl_datatype_t*)jl_typeof(v);
     if (i >= jl_datatype_nfields(st))
         jl_bounds_error_int(v, i+1);
@@ -215,11 +222,15 @@ JL_DLLEXPORT jl_value_t *jl_get_nth_field_checked(jl_value_t *v, size_t i)
 
 JL_DLLEXPORT void jl_set_nth_field(jl_value_t *v, size_t i, jl_value_t *rhs)
 {
+    // unmanaged safe
     jl_datatype_t *st = (jl_datatype_t*)jl_typeof(v);
     size_t offs = jl_field_offset(st,i);
     if (jl_field_isptr(st,i)) {
+        int8_t gc_state = jl_gc_managed_enter();
         *(jl_value_t**)((char*)v + offs) = rhs;
-        if (rhs != NULL) jl_gc_wb(v, rhs);
+        if (rhs != NULL)
+            jl_gc_wb(v, rhs);
+        jl_gc_managed_leave(gc_state);
     }
     else {
         jl_assign_bits((char*)v + offs, rhs);
@@ -228,6 +239,7 @@ JL_DLLEXPORT void jl_set_nth_field(jl_value_t *v, size_t i, jl_value_t *rhs)
 
 JL_DLLEXPORT int jl_field_isdefined(jl_value_t *v, size_t i)
 {
+    // unmanaged safe
     jl_datatype_t *st = (jl_datatype_t*)jl_typeof(v);
     size_t offs = jl_field_offset(st,i);
     if (jl_field_isptr(st,i)) {
@@ -238,7 +250,10 @@ JL_DLLEXPORT int jl_field_isdefined(jl_value_t *v, size_t i)
 
 JL_DLLEXPORT jl_value_t *jl_new_struct(jl_datatype_t *type, ...)
 {
-    if (type->instance != NULL) return type->instance;
+    // unmanaged safe
+    if (type->instance != NULL)
+        return type->instance;
+    JL_RETURN_NULL_IF_UNMANAGED();
     va_list args;
     size_t nf = jl_datatype_nfields(type);
     va_start(args, type);
@@ -253,7 +268,10 @@ JL_DLLEXPORT jl_value_t *jl_new_struct(jl_datatype_t *type, ...)
 JL_DLLEXPORT jl_value_t *jl_new_structv(jl_datatype_t *type, jl_value_t **args,
                                         uint32_t na)
 {
-    if (type->instance != NULL) return type->instance;
+    // unmanaged safe
+    if (type->instance != NULL)
+        return type->instance;
+    JL_RETURN_NULL_IF_UNMANAGED();
     size_t nf = jl_datatype_nfields(type);
     jl_value_t *jv = newstruct(type);
     for(size_t i=0; i < na; i++) {
@@ -269,7 +287,10 @@ JL_DLLEXPORT jl_value_t *jl_new_structv(jl_datatype_t *type, jl_value_t **args,
 
 JL_DLLEXPORT jl_value_t *jl_new_struct_uninit(jl_datatype_t *type)
 {
-    if (type->instance != NULL) return type->instance;
+    // unmanaged safe
+    if (type->instance != NULL)
+        return type->instance;
+    JL_RETURN_NULL_IF_UNMANAGED();
     jl_value_t *jv = newstruct(type);
     if (type->size > 0)
         memset(jl_data_ptr(jv), 0, type->size);
@@ -279,7 +300,10 @@ JL_DLLEXPORT jl_value_t *jl_new_struct_uninit(jl_datatype_t *type)
 JL_DLLEXPORT jl_function_t *jl_new_closure(jl_fptr_t fptr, jl_value_t *env,
                                            jl_lambda_info_t *linfo)
 {
-    jl_function_t *f = (jl_function_t*)jl_gc_alloc_3w(); assert(NWORDS(sizeof(jl_function_t))==3);
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
+    jl_function_t *f = (jl_function_t*)jl_gc_alloc_3w();
+    assert(NWORDS(sizeof(jl_function_t)) == 3);
     jl_set_typeof(f, jl_function_type);
     f->fptr = (fptr!=NULL ? fptr : linfo->fptr);
     f->env = env;
@@ -289,6 +313,7 @@ JL_DLLEXPORT jl_function_t *jl_new_closure(jl_fptr_t fptr, jl_value_t *env,
 
 JL_DLLEXPORT jl_fptr_t jl_linfo_fptr(jl_lambda_info_t *linfo)
 {
+    // unmanaged safe
     return linfo->fptr;
 }
 
@@ -296,6 +321,8 @@ JL_DLLEXPORT
 jl_lambda_info_t *jl_new_lambda_info(jl_value_t *ast, jl_svec_t *sparams,
                                      jl_module_t *ctx)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     jl_lambda_info_t *li =
         (jl_lambda_info_t*)newobj((jl_value_t*)jl_lambda_info_type,
                                   NWORDS(sizeof(jl_lambda_info_t)));
@@ -340,6 +367,7 @@ jl_lambda_info_t *jl_new_lambda_info(jl_value_t *ast, jl_svec_t *sparams,
 
 jl_lambda_info_t *jl_copy_lambda_info(jl_lambda_info_t *linfo)
 {
+    // managed only
     jl_lambda_info_t *new_linfo =
         jl_new_lambda_info(linfo->ast, linfo->sparams, linfo->module);
     new_linfo->tfunc = linfo->tfunc;
@@ -366,6 +394,7 @@ static jl_sym_t *symtab = NULL;
 
 static uptrint_t hash_symbol(const char *str, size_t len)
 {
+    // unmanaged safe
     return memhash(str, len) ^ ~(uptrint_t)0/3*2;
 }
 
@@ -373,11 +402,14 @@ static uptrint_t hash_symbol(const char *str, size_t len)
 
 static size_t symbol_nbytes(size_t len)
 {
+    // unmanaged safe
     return (sizeof_jl_taggedvalue_t + sizeof(jl_sym_t) + len + 1 + 7) & -8;
 }
 
 static jl_sym_t *mk_symbol(const char *str, size_t len)
 {
+    // unmanaged safe
+    // GC doesn't trace symbols
 #ifndef MEMDEBUG
     static char *sym_pool = NULL;
     static char *pool_ptr = NULL;
@@ -407,8 +439,10 @@ static jl_sym_t *mk_symbol(const char *str, size_t len)
     return sym;
 }
 
-static jl_sym_t **symtab_lookup(jl_sym_t **ptree, const char *str, size_t len, jl_sym_t **parent)
+static jl_sym_t **symtab_lookup(jl_sym_t **ptree, const char *str, size_t len,
+                                jl_sym_t **parent)
 {
+    // unmanaged safe
     int x;
     if (parent != NULL) *parent = NULL;
     uptrint_t h = hash_symbol(str, len);
@@ -432,35 +466,46 @@ static jl_sym_t **symtab_lookup(jl_sym_t **ptree, const char *str, size_t len, j
 
 static jl_sym_t *_jl_symbol(const char *str, size_t len)
 {
+    // unmanaged safe
+    int8_t state = jl_gc_managed_enter(); // For the WB only
     jl_sym_t **pnode;
     jl_sym_t *parent;
     pnode = symtab_lookup(&symtab, str, len, &parent);
     if (*pnode == NULL) {
         *pnode = mk_symbol(str, len);
+        // Do we really need the WB here? We don't mark symbols anyway....
         if (parent != NULL)
             jl_gc_wb(parent, *pnode);
     }
+    jl_gc_managed_leave(state);
     return *pnode;
 }
 
 JL_DLLEXPORT jl_sym_t *jl_symbol(const char *str)
 {
+    // unmanaged safe
     return _jl_symbol(str, strlen(str));
 }
 
 JL_DLLEXPORT jl_sym_t *jl_symbol_lookup(const char *str)
 {
+    // unmanaged safe
     return *symtab_lookup(&symtab, str, strlen(str), NULL);
 }
 
 JL_DLLEXPORT jl_sym_t *jl_symbol_n(const char *str, int32_t len)
 {
+    // unmanaged safe
     if (memchr(str, 0, len))
         jl_exceptionf(jl_argumenterror_type, "Symbol name may not contain \\0");
     return _jl_symbol(str, len);
 }
 
-JL_DLLEXPORT jl_sym_t *jl_get_root_symbol(void) { return symtab; }
+JL_DLLEXPORT jl_sym_t *jl_get_root_symbol(void)
+{
+    // unmanaged safe
+    return symtab;
+}
 
 static uint32_t gs_ctr = 0;  // TODO: per-thread
 uint32_t jl_get_gs_ctr(void) { return gs_ctr; }
@@ -468,6 +513,7 @@ void jl_set_gs_ctr(uint32_t ctr) { gs_ctr = ctr; }
 
 JL_DLLEXPORT jl_sym_t *jl_gensym(void)
 {
+    // unmanaged safe
     static char name[16];
     char *n;
     n = uint2str(&name[2], sizeof(name)-2, gs_ctr, 10);
@@ -478,6 +524,7 @@ JL_DLLEXPORT jl_sym_t *jl_gensym(void)
 
 JL_DLLEXPORT jl_sym_t *jl_tagged_gensym(const char *str, int32_t len)
 {
+    // unmanaged safe
     static char gs_name[14];
     if (symbol_nbytes(len) >= SYM_POOL_SIZE)
         jl_exceptionf(jl_argumenterror_type, "Symbol length exceeds maximum");
@@ -500,6 +547,8 @@ JL_DLLEXPORT jl_sym_t *jl_tagged_gensym(const char *str, int32_t len)
 
 JL_DLLEXPORT jl_typename_t *jl_new_typename(jl_sym_t *name)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     jl_typename_t *tn=(jl_typename_t*)newobj((jl_value_t*)jl_typename_type, NWORDS(sizeof(jl_typename_t)));
     tn->name = name;
     tn->module = jl_current_module;
@@ -514,7 +563,10 @@ JL_DLLEXPORT jl_typename_t *jl_new_typename(jl_sym_t *name)
 jl_datatype_t *jl_new_abstracttype(jl_value_t *name, jl_datatype_t *super,
                                    jl_svec_t *parameters)
 {
-    jl_datatype_t *dt = jl_new_datatype((jl_sym_t*)name, super, parameters, jl_emptysvec, jl_emptysvec, 1, 0, 0);
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
+    jl_datatype_t *dt = jl_new_datatype((jl_sym_t*)name, super, parameters,
+                                        jl_emptysvec, jl_emptysvec, 1, 0, 0);
     dt->pointerfree = 0;
     return dt;
 }
@@ -522,6 +574,8 @@ jl_datatype_t *jl_new_abstracttype(jl_value_t *name, jl_datatype_t *super,
 JL_DLLEXPORT jl_datatype_t *jl_new_uninitialized_datatype(size_t nfields,
                                                           int8_t fielddesc_type)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     // fielddesc_type is specified manually for builtin types
     // and is (will be) calculated automatically for user defined types.
     uint32_t fielddesc_size = jl_fielddesc_size(fielddesc_type);
@@ -538,6 +592,7 @@ JL_DLLEXPORT jl_datatype_t *jl_new_uninitialized_datatype(size_t nfields,
 
 void jl_compute_field_offsets(jl_datatype_t *st)
 {
+    // managed only
     size_t sz = 0, alignm = 1;
     int ptrfree = 1;
 
@@ -597,6 +652,8 @@ JL_DLLEXPORT jl_datatype_t *jl_new_datatype(jl_sym_t *name, jl_datatype_t *super
                                             int abstract, int mutabl,
                                             int ninitialized)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     jl_datatype_t *t=NULL;
     jl_typename_t *tn=NULL;
     JL_GC_PUSH2(&t, &tn);
@@ -666,6 +723,8 @@ JL_DLLEXPORT jl_datatype_t *jl_new_bitstype(jl_value_t *name,
                                             jl_datatype_t *super,
                                             jl_svec_t *parameters, size_t nbits)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     jl_datatype_t *bt = jl_new_datatype((jl_sym_t*)name, super, parameters,
                                         jl_emptysvec, jl_emptysvec, 0, 0, 0);
     bt->size = nbits/8;
@@ -680,7 +739,10 @@ JL_DLLEXPORT jl_datatype_t *jl_new_bitstype(jl_value_t *name,
 
 jl_typector_t *jl_new_type_ctor(jl_svec_t *params, jl_value_t *body)
 {
-    jl_typector_t *tc = (jl_typector_t*)newobj((jl_value_t*)jl_typector_type,NWORDS(sizeof(jl_typector_t)));
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
+    jl_typector_t *tc = (jl_typector_t*)newobj((jl_value_t*)jl_typector_type,
+                                               NWORDS(sizeof(jl_typector_t)));
     tc->parameters = params;
     tc->body = body;
     return (jl_typector_t*)tc;
@@ -691,8 +753,10 @@ jl_typector_t *jl_new_type_ctor(jl_svec_t *params, jl_value_t *body)
 #define BOXN_FUNC(nb,nw)                                                \
     JL_DLLEXPORT jl_value_t *jl_box##nb(jl_datatype_t *t, int##nb##_t x) \
     {                                                                   \
+        /* unmanaged safe */                                            \
         assert(jl_isbits(t));                                           \
         assert(jl_datatype_size(t) == sizeof(x));                       \
+        JL_RETURN_NULL_IF_UNMANAGED();                                  \
         jl_value_t *v = (jl_value_t*)jl_gc_alloc_##nw##w();             \
         jl_set_typeof(v, t);                                            \
         *(int##nb##_t*)jl_data_ptr(v) = x;                              \
@@ -710,6 +774,7 @@ BOXN_FUNC(64, 2)
 #define UNBOX_FUNC(j_type,c_type)                                       \
     JL_DLLEXPORT c_type jl_unbox_##j_type(jl_value_t *v)                \
     {                                                                   \
+        /* unmanaged safe */                                            \
         assert(jl_is_bitstype(jl_typeof(v)));                           \
         assert(jl_datatype_size(jl_typeof(v)) == sizeof(c_type));       \
         return *(c_type*)jl_data_ptr(v);                                \
@@ -731,6 +796,8 @@ UNBOX_FUNC(gensym, ssize_t)
 #define BOX_FUNC(typ,c_type,pfx,nw)                         \
     JL_DLLEXPORT jl_value_t *pfx##_##typ(c_type x)          \
     {                                                       \
+        /* unmanaged safe */                                \
+        JL_RETURN_NULL_IF_UNMANAGED();                      \
         jl_value_t *v = (jl_value_t*)jl_gc_alloc_##nw##w(); \
         jl_set_typeof(v, jl_##typ##_type);                  \
         *(c_type*)jl_data_ptr(v) = x;                       \
@@ -750,9 +817,11 @@ BOX_FUNC(float64, double, jl_box, 2)
     static jl_value_t *boxed_##typ##_cache[NBOX_C];           \
     JL_DLLEXPORT jl_value_t *jl_box_##typ(c_type x)           \
     {                                                         \
+        /* unmanaged safe */                                            \
         c_type idx = x+NBOX_C/2;                              \
         if ((u##c_type)idx < (u##c_type)NBOX_C)               \
             return boxed_##typ##_cache[idx];                  \
+        JL_RETURN_NULL_IF_UNMANAGED();                        \
         jl_value_t *v = (jl_value_t*)jl_gc_alloc_##nw##w();   \
         jl_set_typeof(v, jl_##typ##_type);                    \
         *(c_type*)jl_data_ptr(v) = x;                         \
@@ -762,8 +831,10 @@ BOX_FUNC(float64, double, jl_box, 2)
     static jl_value_t *boxed_##typ##_cache[NBOX_C];             \
     JL_DLLEXPORT jl_value_t *jl_box_##typ(c_type x)             \
     {                                                           \
+        /* unmanaged safe */                                    \
         if (x < NBOX_C)                                         \
             return boxed_##typ##_cache[x];                      \
+        JL_RETURN_NULL_IF_UNMANAGED();                          \
         jl_value_t *v = (jl_value_t*)jl_gc_alloc_##nw##w();     \
         jl_set_typeof(v, jl_##typ##_type);                      \
         *(c_type*)jl_data_ptr(v) = x;                           \
@@ -784,13 +855,15 @@ UIBOX_FUNC(uint64, uint64_t, 2)
 #endif
 
 static jl_value_t *boxed_int8_cache[256];
-jl_value_t *jl_box_int8(int8_t x)
+JL_DLLEXPORT jl_value_t *jl_box_int8(int8_t x)
 {
+    // unmanaged safe
     return boxed_int8_cache[(uint8_t)x];
 }
 static jl_value_t *boxed_uint8_cache[256];
-jl_value_t *jl_box_uint8(uint8_t x)
+JL_DLLEXPORT jl_value_t *jl_box_uint8(uint8_t x)
 {
+    // unmanaged safe
     return boxed_uint8_cache[x];
 }
 
@@ -826,6 +899,7 @@ void jl_init_box_caches(void)
 
 void jl_mark_box_caches(void)
 {
+    // In GC only
     int64_t i;
     for(i=0; i < 256; i++) {
         jl_gc_setmark(boxed_int8_cache[i]);
@@ -843,8 +917,9 @@ void jl_mark_box_caches(void)
     }
 }
 
-jl_value_t *jl_box_bool(int8_t x)
+JL_DLLEXPORT jl_value_t *jl_box_bool(int8_t x)
 {
+    // unmanaged safe
     if (x)
         return jl_true;
     return jl_false;
@@ -852,6 +927,8 @@ jl_value_t *jl_box_bool(int8_t x)
 
 JL_DLLEXPORT jl_value_t *jl_new_box(jl_value_t *v)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     jl_value_t *box = (jl_value_t*)jl_gc_alloc_1w();
     jl_set_typeof(box, jl_box_any_type);
     // if (v) jl_gc_wb(box, v); // write block not needed: box was just allocated
@@ -863,6 +940,8 @@ JL_DLLEXPORT jl_value_t *jl_new_box(jl_value_t *v)
 
 jl_expr_t *jl_exprn(jl_sym_t *head, size_t n)
 {
+    // unmanaged safe
+    JL_RETURN_NULL_IF_UNMANAGED();
     jl_array_t *ar = n==0 ? (jl_array_t*)jl_an_empty_cell : jl_alloc_cell_1d(n);
     JL_GC_PUSH1(&ar);
     jl_expr_t *ex = (jl_expr_t*)jl_gc_alloc_3w(); assert(NWORDS(sizeof(jl_expr_t))==3);
@@ -876,13 +955,16 @@ jl_expr_t *jl_exprn(jl_sym_t *head, size_t n)
 
 JL_CALLABLE(jl_f_new_expr)
 {
+    // unmanaged safe
     JL_NARGSV(Expr, 1);
     JL_TYPECHK(Expr, symbol, args[0]);
+    JL_RETURN_NULL_IF_UNMANAGED();
     jl_array_t *ar = jl_alloc_cell_1d(nargs-1);
     JL_GC_PUSH1(&ar);
-    for(size_t i=0; i < nargs-1; i++)
+    for (size_t i=0; i < nargs-1; i++)
         jl_cellset(ar, i, args[i+1]);
-    jl_expr_t *ex = (jl_expr_t*)jl_gc_alloc_3w(); assert(NWORDS(sizeof(jl_expr_t))==3);
+    jl_expr_t *ex = (jl_expr_t*)jl_gc_alloc_3w();
+    assert(NWORDS(sizeof(jl_expr_t))==3);
     jl_set_typeof(ex, jl_expr_type);
     ex->head = (jl_sym_t*)args[0];
     ex->args = ar;
